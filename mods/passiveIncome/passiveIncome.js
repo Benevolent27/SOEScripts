@@ -15,15 +15,11 @@ const {
   miscHelpers
 } = global; // Some random, but very useful helper functions I added.
 miscHelpers.ensureFolderExists(stationsFolder);
-var {
-  i
-} = miscHelpers;
+var {i} = miscHelpers;
 
 // ### Get the installObj and set things up ###
 var installObj = global.getInstallObj(__dirname);
-var {
-  event
-} = installObj;
+var {event} = installObj;
 const thisConsole = installObj.console; // This is a console that will only display when the user switches to the console for this server.
 
 if (!installObj.passiveIncomeTicked) {
@@ -171,14 +167,28 @@ async function command(player, command, args, messageObj) {
     } else if (i(args[0], "refill")) {
       return player.isAdmin("", function (err, result) {
         if (err) {
-          thisConsole.log("Error seeing if player was an admin!").catch((err) => thisConsole.error(err));
+          thisConsole.log("Error seeing if player was an admin!");
         } else if (result == true) {
-          player.msg("Refilling this station's resources!").catch((err) => thisConsole.error(err));
+          player.msg("Refilling the resources of this station!").catch((err) => thisConsole.error(err));
           addResources();
         } else {
           player.msg("Sorry, only admins can refill a station!").catch((err) => thisConsole.error(err));
         }
       });
+    } else if (args.length == 0 || i(args[0],"help")){
+      await player.botMsg("This command is used to set a resource station or extract from it!").catch((err) => thisConsole.error(err));
+      await player.msg("Usages:").catch((err) => thisConsole.error(err));
+      await player.msg(" - !station set mining").catch((err) => thisConsole.error(err));
+      await player.msg(" - !station extract").catch((err) => thisConsole.error(err));
+      let isPlayerAdmin=await player.isAdmin().catch((err) => thisConsole.error(err));
+      if (isPlayerAdmin){
+        await player.msg(" ").catch((err) => thisConsole.error(err));
+        await player.msg(" Admin Only:").catch((err) => thisConsole.error(err));
+        await player.msg(" - !station refill").catch((err) => thisConsole.error(err));
+      }
+      await player.msg(" ").catch((err) => thisConsole.error(err));
+    } else {
+      await player.msg("Invalid subcommand!  For help on this command, type: !help station").catch((err) => thisConsole.error(err));
     }
   }
   return true; // added to make ESLint happy.
