@@ -1,35 +1,39 @@
+// ################
+// ### SETTINGS ###
+// ################
+var tickWaitSeconds=900000; // How long to wait between cycles
+
+// ### Script Set up
 const fs = require('fs');
 const path= require('path'); // This is needed to make paths friendly across OS's
 const configFile=path.join(__dirname,"config.json");
-const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+const config = JSON.parse(fs.readFileSync(configFile, 'utf8')); // Reads the config file and turns it into an object
 const stationsFolder = path.join(__dirname,"stations"); // __dirname = a variable available in node.js that resolves to the current directory your script is in.  path.join puts them together to make the full path needed.
 
-if (!global.passiveIncomeTicked){
-    global.passiveIncomeTicked=false; // This is to ensure the loop works properly even if the script is reloaded.
-}
-const miscHelpers=global.miscHelpers; // Some random, but very useful helper functions I added.
+const {objectHelper,miscHelpers}=global; // Some random, but very useful helper functions I added.
 miscHelpers.ensureFolderExists(stationsFolder);
-const objectHelper=global.objectHelper;
+var {i} = miscHelpers;
 
-global.event.on("init", init); 
-function init(){ // This is where we register commands and do other prep.  This happens after all other mods are loaded in.  "Commands" are actually a mod I wrote for the wrapper.
-    console.log("@#$#@$@# registering station command!");
-    global.regCommand("station","Station Stuff",false,true); // command, category, adminOnly, displayInHelp
-    if (!global.passiveIncomeTicked){ // We only want to start the loop if it wasn't already started.
-        console.log("Resource ticker for passiveIncome mod commencing..");    
+// ### Get the installObj and set things up ###
+var installObj = global.getInstallObj(__dirname);
+var {event} = installObj;
+const thisConsole=installObj.console; // This is a console that will only display when the user switches to the console for this server.
+
+if (!installObj.passiveIncomeTicked){
+  installObj.passiveIncomeTicked=false; // This is to ensure the loop works properly even if the script is reloaded.
+}
+
+event.on("commandStart", commandStart); 
+function commandStart(regCommand){ // This is where we register commands and do other prep.  This happens after all other mods are loaded in.
+    thisConsole.log("@#$#@$@# registering station command!");
+    regCommand("station","Station Stuff",false,true); // command, category, adminOnly, displayInHelp
+    if (!installObj.passiveIncomeTicked){ // We only want to start the loop if it wasn't already started.
+        thisConsole.log("Resource ticker for passiveIncome mod commencing..");    
         incomeTick();
     }
 }
 
-function i(input,input2){ // I use this to do easy case insensitive matching for commands since javascript is case sensitive 
-    if (typeof input == "string" && typeof input2 == "string"){
-        return input.toLowerCase() === input2.toLowerCase();
-    } else {
-        throw new Error("Invalid input given to 'i' function!  Needs two strings!");
-    }
-}
-
-global.event.on('command', command);
+event.on('playerCommand', command);
 async function command (player,command,args,messageObj) {
     if (i(command,"station")) { //station
         if (i(args[0],"set")) { //station set
@@ -44,7 +48,7 @@ async function command (player,command,args,messageObj) {
                             if (playerFaction){ // If the player is not in a faction, this will return null
                                 await addMiningStation(playerEntity, playerFaction,function(err,result){
                                     if (err){
-                                        console.log("There was an error adding the station: ",err);
+                                        thisConsole.log("There was an error adding the station: ",err);
                                         return player.msg("There was an error adding the station!  Please try again!");
                                     } else {
                                        return player.msg("Added the station as a mining rig!") 
@@ -61,8 +65,8 @@ async function command (player,command,args,messageObj) {
                         await player.msg("To designate a station as a mining facility, you must be in control of the station.  Please enter a build block for the station you would like to designate.");
                     }
                 } catch (err) {
-                    console.log("An error happened when attempting to set the mining area for player: " + player.toString(),err);
-                    console.dir(err);
+                    thisConsole.log("An error happened when attempting to set the mining area for player: " + player.toString(),err);
+                    thisConsole.dir(err);
                 }
             }
         } else if (i(args[0],"extract")) {
@@ -74,7 +78,7 @@ async function command (player,command,args,messageObj) {
                 if (playerCurrentEntityType=="station"){
                     var stationFile=path.join(stationsFolder,playerCurrentEntity.toString() + ".json"); // For an EntityObj, using ".toString()" on it returns the UID of the entity.
                     // To extract, there must have been a file written.  Let's check for that file.
-                    console.log("Checking to see if the file exists: " + stationFile);
+                    thisConsole.log("Checking to see if the file exists: " + stationFile);
                     if (miscHelpers.existsAndIsFile(stationFile)){
                         // Now let's read that file to ensure the player is in the faction the station is registered under.
                         fs.readFile(stationFile,'utf8',function(err,result){
@@ -82,10 +86,10 @@ async function command (player,command,args,messageObj) {
                                 throw err;
                             }
                             let registeredStationObj=JSON.parse(result);
-                            console.log("registeredStationObj:",registeredStationObj);
+                            thisConsole.log("registeredStationObj:",registeredStationObj);
                                 let storageList = registeredStationObj.storage;
                                 let storageListCopy = objectHelper.copyArray(storageList);
-                                console.log("storageList:",storageList);
+                                thisConsole.log("storageList:",storageList);
                                 if (storageList){ // This needs to be here since you've decided to use "null" as a temporary value rather than an empty array
                                     // for (i in storageList) { // This isn't doing what you think it's doing.  This cycles through the keys of the object, which includes methods added by javascript and node.js.
                                     var itemNumber; // Don't declare a new variable for each for loop, reuse the same one.
@@ -99,21 +103,21 @@ async function command (player,command,args,messageObj) {
                                             promiseArray.push(player.giveId(itemNumber,itemCount).catch((err) => err)); // This makes each promise return the ErrorObj as the result when using Promise.all to resolve all the promises.
                                         }
                                     }
-                                    console.log("promiseArray.length: " + promiseArray.length);
+                                    thisConsole.log("promiseArray.length: " + promiseArray.length);
                                     // player.giveId returned a bunch of promise objects, so now we need to resolve them all now and handle any errors that may have happened.
                                     Promise.all(promiseArray).then(function(values) { // This will wait till all PlayerObj.giveId methods have finished.
-                                        console.log("values.length: " + values);
+                                        thisConsole.log("values.length: " + values);
                                         let failure=false;
                                         let success=false;
                                         for (let i=0;i<values.length;i++) {
                                             // cycle through the list of promises and check each one to see that each command was errored, successful, or not successful
                                             if (values[i]){ // This will be a true value or error object, which will be truthy.
                                                 if (values[i] instanceof Error){ // Since we had each promise return an Error object as it's return value, we need to check each result
-                                                    console.log("Error giving player item: " + storageListCopy[i] + " -- Skipping..");
+                                                    thisConsole.log("Error giving player item: " + storageListCopy[i] + " -- Skipping..");
                                                     failure=true;
                                                 } else {
                                                     // this one succeeded! Queue this number in the array to be removed.
-                                                    console.log("Successfully gave item: " + storageListCopy[i].item + "  Count: " + storageListCopy[i].count);
+                                                    thisConsole.log("Successfully gave item: " + storageListCopy[i].item + "  Count: " + storageListCopy[i].count);
                                                     storageList.splice(storageList.indexOf(storageListCopy[i]), 1); // Removes 1 value in the Array at the location specified.  This will also make changes to the registeredStationObj object
                                                     success=true;
                                                 }
@@ -123,29 +127,29 @@ async function command (player,command,args,messageObj) {
                                         }
                                         // We wait before removing the values, because we need to array of attempts to be exactly equal to the number of items attempted to be given
                                         if (success && !failure){
-                                            player.msg("Succeeded in giving you " + values.length + " items! Yay!").catch((err) => console.error(err));
+                                            player.msg("Succeeded in giving you " + values.length + " items! Yay!").catch((err) => thisConsole.error(err));
                                         } else if (!success && !failure){
-                                            player.msg("There were items to give at this time!  Please try again later!").catch((err) => console.error(err));
+                                            player.msg("There were items to give at this time!  Please try again later!").catch((err) => thisConsole.error(err));
                                         } else if (success){
-                                            player.msg("Succeeded in giving you somes items! Yay!  But one or more items failed.. Try again to collect the rest!").catch((err) => console.error(err));
+                                            player.msg("Succeeded in giving you somes items! Yay!  But one or more items failed.. Try again to collect the rest!").catch((err) => thisConsole.error(err));
                                         } else if (failure){
-                                            player.msg("One or more items failed to be given! Please try again!").catch((err) => console.error(err));
+                                            player.msg("One or more items failed to be given! Please try again!").catch((err) => thisConsole.error(err));
                                         }
                                         if (success){ // Only overwrite to the file if any values were changed.
-                                            console.log("Overwriting mining station file: " + stationFile);
+                                            thisConsole.log("Overwriting mining station file: " + stationFile);
                                             fs.writeFile(stationFile, JSON.stringify(registeredStationObj, null, 4),function(err){
                                                 if (err){ // Hopefully there is never a problem over-writing the file.. but in case there is, we should handle the problem.
                                                     global.log("[passiveIncome] ERROR during '!station extract' command!  Could not overwrite file: " + stationFile + " Player: " + player.toString());
-                                                    console.log("ERROR: Could not overwrite file: " + stationFile,err);
+                                                    thisConsole.log("ERROR: Could not overwrite file: " + stationFile,err);
                                                 } else {
-                                                    console.log("Write succeeded!");
+                                                    thisConsole.log("Write succeeded!");
                                                 }
                                             });
                                         }
                                     });
                                 }  
                             //} else {
-                               // player.msg("Cannot collect from this station! Your faction did not register this station!").catch((err) => console.error(err));
+                               // player.msg("Cannot collect from this station! Your faction did not register this station!").catch((err) => thisConsole.error(err));
                           //  }
                         });
                     } else {
@@ -163,12 +167,12 @@ async function command (player,command,args,messageObj) {
         } else if (i(args[0],"refill")) {
             return player.isAdmin("",function(err,result){
                 if (err){
-                    console.log("Error seeing if player was an admin!").catch((err) => console.error(err));
+                    thisConsole.log("Error seeing if player was an admin!").catch((err) => thisConsole.error(err));
                 } else if (result == true){
-                    player.msg("Refilling this station's resources!").catch((err) => console.error(err));
+                    player.msg("Refilling this station's resources!").catch((err) => thisConsole.error(err));
                     addResources();
                 } else {
-                    player.msg("Sorry, only admins can refill a station!").catch((err) => console.error(err));
+                    player.msg("Sorry, only admins can refill a station!").catch((err) => thisConsole.error(err));
                 }
             });
         }
@@ -177,7 +181,7 @@ async function command (player,command,args,messageObj) {
 }
 
 function addMiningStation(stationObj,factionObj,cb) {
-    console.log("addMiningStation function ran..");
+    thisConsole.log("addMiningStation function ran..");
     let stationType = "mining";
     let factionNumber = factionObj.toString();
     let storedResources = [];
@@ -206,8 +210,8 @@ function modifyStationValues(filePath){
     let resourceConfig = config.resourcesToAdd;
     return fs.readFile(filePath,"utf8",function(err,result){
         if (err){
-            console.log("Error reading file (skipping!): " + filePath);
-            console.dir(err);
+            thisConsole.log("Error reading file (skipping!): " + filePath);
+            thisConsole.dir(err);
             return err;
         } else {
             let stuffToAdd={};
@@ -250,8 +254,8 @@ function modifyStationValues(filePath){
             // All done modifying the fileContents, so let's write them
             return fs.writeFile(filePath,JSON.stringify(fileContents, null, 4),function(err){
                 if (err){ // We should never have trouble writing to hte file.. hopefully..
-                    console.log("Unable to write new values to file: " + filePath);
-                    console.dir(err);
+                    thisConsole.log("Unable to write new values to file: " + filePath);
+                    thisConsole.dir(err);
                     global.log("Unable to write new values to file: " + filePath);
                     return err;
                 } else {
@@ -283,21 +287,21 @@ function addResources() {
     //         }
     //     });
     // });
-    // console.log("Resources have been added to mining stations!");
+    // thisConsole.log("Resources have been added to mining stations!");
 }
 
 function sleep(ms) { // This will only work within async functions.
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-global.event.on("passiveIncomeTick", incomeTick); // This is the loop you want.  This ensures reloading the mod won't start more than 1 loop, since this function probably stays in memory even if the mod is reloaded.  This needs to be tested though.
+event.on("passiveIncomeTick", incomeTick); // This is the loop you want.  This ensures reloading the mod won't start more than 1 loop, since this function probably stays in memory even if the mod is reloaded.  This needs to be tested though.
 async function incomeTick(){
-    global.passiveIncomeTicked=true; // The clock has been started!
-    await sleep(900000);
+    installObj.passiveIncomeTicked=true; // The clock has been started!
+    await sleep(tickWaitSeconds);
     addResources();
     tick();
     return true;
 }
 function tick(){ // use incomeTick to get things started, not this function.
-    global.event.emit("passiveIncomeTick");
+    event.emit("passiveIncomeTick");
 }
